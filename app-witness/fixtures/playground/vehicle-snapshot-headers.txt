@@ -1,0 +1,20 @@
+HTTP/1.1 303 See Other
+Date: Sat, 10 Oct 2026 08:45:43 GMT
+Content-Length: 0
+Connection: keep-alive
+x-request-id: fa8ffdf0-b7e2-4160-98e8-32ef95ad3c38
+x-envoy-upstream-service-time: 408
+server: envoy
+
+HTTP/1.1 200 OK
+Date: Sat, 10 Oct 2026 08:45:45 GMT
+Content-Type: image/jpeg
+Content-Length: 118167
+Connection: keep-alive
+Accept-Ranges: bytes
+Content-Encryption: none
+Last-Modified: Sat, 10 Oct 2026 08:45:09 GMT
+X-Media-Origin: recording
+X-Media-Timestamp: 1791621909809
+X-Request-Id: fa8ffdf0-b7e2-4160-98e8-32ef95ad3c38
+

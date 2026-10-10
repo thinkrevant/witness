@@ -1,0 +1,52 @@
+{
+  "data": [
+    {
+      "type": "history-events",
+      "id": "ava1.ring.history.event.LICSUIEC3XESNMGU22WX6E37LPA5GMTFCH46Z5YAD7Q7QUWHMX5EWBAUGNWMY6KVD3ER6HBPFGOCYH2L5DU2T5FDMLKGGY5W",
+      "attributes": {
+        "start": 1791622011263,
+        "event_type": "on_demand",
+        "end": 1791622050914,
+        "is_third_party_reviewed": true
+      },
+      "relationships": {
+        "source": {
+          "data": {
+            "type": "devices",
+            "id": "ava1.ring.device.MMC66XL4OGHBVO4S3B3F6ROKHS6WSWRHKOX74GFQABSJPLI23VMPX3G7VDURMPY2F6UBWOM4YDHFAKDPLP3H5I6EVQ6SHUIQ"
+          }
+        },
+        "cv_detections": {
+          "data": []
+        }
+      },
+      "meta": {
+        "riid": null
+      }
+    },
+    {
+      "type": "history-events",
+      "id": "ava1.ring.history.event.2CXFMGXZF7SKH25MJOGXCCOKI2FYOCBAYIU2F4WPBBYMV5F6KV2YBJ5U5BUWTCJWJYPHQE35HI7I6ET4MJXOESGPVKNJZIUB",
+      "attributes": {
+        "start": 1791621888046,
+        "is_third_party_reviewed": true,
+        "end": 1791621909805,
+        "event_type": "on_demand"
+      },
+      "relationships": {
+        "source": {
+          "data": {
+            "type": "devices",
+            "id": "ava1.ring.device.MMC66XL4OGHBVO4S3B3F6ROKHS6WSWRHKOX74GFQABSJPLI23VMPX3G7VDURMPY2F6UBWOM4YDHFAKDPLP3H5I6EVQ6SHUIQ"
+          }
+        },
+        "cv_detections": {
+          "data": []
+        }
+      },
+      "meta": {
+        "riid": null
+      }
+    }
+  ]
+}

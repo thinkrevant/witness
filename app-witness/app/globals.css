@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/*
+ * One calm light theme on every page (no automatic dark mode): warm stone background,
+ * teal-700 accent, all text at 4.5:1 contrast or better. System fonts so the app builds
+ * and runs fully offline.
+ */
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-stone-50);
+  color: var(--color-stone-900);
+  font-family: var(--font-sans);
+}

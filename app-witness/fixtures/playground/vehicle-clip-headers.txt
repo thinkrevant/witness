@@ -1,0 +1,18 @@
+HTTP/1.1 303 See Other
+Date: Sat, 10 Oct 2026 08:46:03 GMT
+Content-Length: 0
+Connection: keep-alive
+x-request-id: 0130bf5a-d80a-49a2-9d2d-b7d96b663eed
+x-envoy-upstream-service-time: 207
+server: envoy
+
+HTTP/1.1 200 OK
+Date: Sat, 10 Oct 2026 08:46:07 GMT
+Content-Type: video/mp4
+Transfer-Encoding: chunked
+Connection: keep-alive
+Content-Encryption: none
+X-Media-Duration: 21466
+X-Media-Timestamp: 1791621888047
+X-Request-Id: 0130bf5a-d80a-49a2-9d2d-b7d96b663eed
+
