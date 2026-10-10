@@ -18,7 +18,7 @@
 - **Fetching media.** A server-side client for the Ring Partner API (`app-witness/lib/ring/client.ts`) lists devices and event history. It downloads the original snapshot and clip through Ring's 303 → pre-signed URL flow, and captures `X-Media-Timestamp`, `X-Media-Duration` and `X-Request-ID`.
 - **Sealing.** Each logged incident is stored byte-for-byte and fingerprinted with SHA-256. It is then appended to a hash-chained ledger: each entry's hash covers its canonical JSON, including the previous entry's hash (`lib/evidence`). The entry hash is timestamped by an RFC 3161 authority; the DER request is hand-encoded (`lib/timestamp/tsa.ts`).
 - **Reporting.** Witness builds a court report PDF (pdf-lib) and an evidence bundle (fflate). The bundle contains a single-file `verify.html` that checks files offline with Web Crypto. The report says exactly what the checks prove, and prints **INTEGRITY WARNING** when something fails.
-- **Tests.** 173 Vitest tests in 18 files cover tamper detection, the Ring client's 303/401/403/416/425 handling, atomic sealing and session gating. Demo mode replays recorded Ring Developer Playground responses, so anyone can run it without a Ring account.
+- **Tests.** 217 Vitest tests in 22 files cover tamper detection, the Ring client's 303/401/403/416/425 handling and WHEP live-view calls, atomic sealing and session gating. Demo mode replays recorded Ring Developer Playground responses, so anyone can run it without a Ring account.
 
 **Why it matters.**
 

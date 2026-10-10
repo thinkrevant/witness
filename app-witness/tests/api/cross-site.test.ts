@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PUT as putCase } from "@/app/api/case/route";
 import { POST as postIncident } from "@/app/api/incidents/route";
+import { POST as postLive } from "@/app/api/live/route";
 import { POST as postLock } from "@/app/api/lock/route";
 import { PUT as putSettings } from "@/app/api/settings/route";
 import { createSession } from "@/lib/auth/session";
@@ -21,6 +22,7 @@ const ROUTES: { name: string; method: string; url: string; handler: Route; body:
   { name: "PUT /api/settings", method: "PUT", url: "/api/settings", handler: putSettings, body: { demoMode: false } },
   { name: "PUT /api/case", method: "PUT", url: "/api/case", handler: putCase, body: { respondentName: "Mallory" } },
   { name: "POST /api/incidents", method: "POST", url: "/api/incidents", handler: postIncident, body: { eventId: "x" } },
+  { name: "POST /api/live", method: "POST", url: "/api/live", handler: postLive, body: { offer: "v=0" } },
 ];
 
 function req(route: (typeof ROUTES)[number], headers: Record<string, string>) {

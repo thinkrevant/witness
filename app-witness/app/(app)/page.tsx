@@ -1,13 +1,14 @@
 "use client";
 
 import AppLink from "@/components/AppLink";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import EventCard, { type ActivityEvent } from "@/components/EventCard";
+import LiveView from "@/components/LiveView";
 import LogDialog from "@/components/LogDialog";
 import RingStatus from "@/components/RingStatus";
 import type { CaseInfo } from "@/lib/store/store";
 import { ApiError, api } from "@/lib/ui/api";
-import { buttonPrimary, card, linkClass } from "@/lib/ui/styles";
+import { buttonPrimary, buttonSecondary, card, linkClass } from "@/lib/ui/styles";
 
 interface EventsResponse {
   source: "ring" | "demo";
@@ -88,6 +89,8 @@ export default function Home() {
   const [feedError, setFeedError] = useState<"reconnect" | "failed" | null>(null);
   const [logging, setLogging] = useState<ActivityEvent | null>(null);
   const [notice, setNotice] = useState("");
+  const [watching, setWatching] = useState(false);
+  const watchButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     api<{ case: CaseInfo | null }>("/api/case")
@@ -108,13 +111,42 @@ export default function Home() {
     );
   }
 
+  function closeLive() {
+    setWatching(false);
+    // Pick up Ring's recording of the live view if it has arrived since Home loaded. A failed
+    // refresh keeps the list already shown.
+    api<EventsResponse>("/api/events")
+      .then(setFeed)
+      .catch(() => undefined);
+    // Return focus to "Watch live" once it is back on the page.
+    setTimeout(() => watchButton.current?.focus(), 0);
+  }
+
+  /** Ring's recording of the live view arrived: show it in the list and open the usual Log dialog. */
+  function onCapture(event: ActivityEvent) {
+    setWatching(false);
+    setFeed((f) =>
+      f && !f.events.some((e) => e.id === event.id)
+        ? { ...f, events: [event, ...f.events].sort((a, b) => b.start - a.start) }
+        : f,
+    );
+    setLogging(event);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="sr-only">Home</h1>
       <CaseSummary info={caseInfo} />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Doorbell activity</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Doorbell activity</h2>
+          {feed?.source === "ring" && !watching && (
+            <button ref={watchButton} type="button" onClick={() => setWatching(true)} className={buttonSecondary}>
+              Watch live
+            </button>
+          )}
+        </div>
         <RingStatus source={feed?.source ?? null} needsReconnect={feedError === "reconnect"} />
         {notice && (
           <p role="status" className="rounded-lg bg-teal-50 px-3 py-2 text-teal-900">
@@ -124,6 +156,7 @@ export default function Home() {
             </AppLink>
           </p>
         )}
+        {watching && <LiveView onClose={closeLive} onCapture={onCapture} />}
         {feedError === "failed" && (
           <p className="text-stone-700">Doorbell activity could not be loaded. Please try again later.</p>
         )}

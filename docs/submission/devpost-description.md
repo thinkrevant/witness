@@ -34,6 +34,7 @@ We looked at the 64 apps in the Ring Appstore and about 75 other Ring-track proj
 Witness is a local web app for a survivor with a Ring doorbell and a protective order. It has five parts.
 
 1. **Doorbell activity.** Using the **Ring Partner API**, Witness lists recent events from the survivor's doorbell, each with a thumbnail and a **Log as violation** button.
+   - **Watch live → Capture this moment.** In live mode, **Watch live** shows the doorbell's live video (WebRTC/WHEP, video only) with a countdown. **Capture this moment** ends the stream, waits for Ring's recording of it to appear in history, and opens the same Seal step. Tested live against the Ring Developer Playground.
 2. **Seal.** The survivor adds an optional note and taps **Seal**. Witness then:
    - downloads the original **snapshot** and **video clip** from Ring;
    - stores the bytes exactly as received;
@@ -58,7 +59,7 @@ Witness is a local web app for a survivor with a Ring doorbell and a protective 
    - The app shows itself as **"Daybook"**, and files download as `daybook-record-<date>`.
    - It is locked with a scrypt-hashed PIN that has a guess throttle, and it locks itself after 5 minutes idle.
    - An **Exit** button, or **Esc pressed twice**, instantly replaces the page with a weather site. The app holds only one history entry, so Back does not return to it.
-   - It sends no notifications, has no accounts and no cloud. Everything stays on the device, and the server listens on 127.0.0.1 only.
+   - It sends no notifications, has no accounts and no cloud. Everything stays on the device, and the server listens on 127.0.0.1 only. Only while Watch live is open does the browser also contact Google's public STUN server (`stun.l.google.com`) to find its network address.
    - The Safety page lists helplines and links to NNEDV's Safety Net.
 
 Witness never recognises faces, people or licence plates. The survivor alone decides what counts as a violation.
@@ -80,12 +81,14 @@ The report says what the checks prove, and no more:
   - `GET /v1/history/devices/{id}/events`, with `links.next` pagination
   - `POST /v1/devices/{id}/media/image/download` (`latest_in_range`, 1920×1080 JPEG)
   - `POST /v1/devices/{id}/media/video/download` (`timestamp` + `duration`)
+  - `POST /v1/devices/{id}/media/streaming/whep/sessions` (live view: raw SDP offer in, `201` + SDP answer out) and `DELETE` on the returned session URL
 
   The client:
   - follows the **303** to the pre-signed URL *without* forwarding the bearer token;
   - captures `X-Media-Timestamp`, `X-Media-Duration` and `X-Request-ID`;
   - retries `416`/`425` after 5, 10, 20 and 30 seconds;
-  - maps `401` to a calm "Reconnect Ring" banner and `403 TIME_RANGE_NOT_AUTHORIZED` to a plain-language message.
+  - maps `401` to a calm "Reconnect Ring" banner and `403 TIME_RANGE_NOT_AUTHORIZED` to a plain-language message;
+  - for live view, relays the browser's WebRTC offer server-side (WHEP is server-to-server), refuses a session URL on any other host, keeps that URL and the token off the browser, and closes the session on Stop, capture, page exit, lock and Quick exit.
 
   The README has a file-and-line table for every call.
 - **Demo mode.** Judges can run the app without a Ring account. Demo mode replays real Playground responses recorded on 2026-10-10 (history JSON, JPEG and MP4 bytes, response headers), and every screen labels them "Ring Developer Playground simulated footage".
@@ -102,14 +105,15 @@ The report says what the checks prove, and no more:
 - **App.** Next.js 15 (App Router), React 19, TypeScript (strict) and Tailwind CSS 4.
   - Data is stored in an atomic JSON file store, with content-addressed media (`data/media/<sha256>.jpg|mp4`).
   - Every API route except the unlock route (`/api/lock`) checks the session. Routes that change data also refuse cross-site requests.
-- **Tests.** **173 Vitest tests in 18 files.** They cover:
+- **Tests.** **217 Vitest tests in 22 files.** They cover:
   - tamper detection (edited, deleted and reordered entries);
-  - the Ring client against mocked 303/401/403/416/425 responses;
+  - the Ring client against mocked 303/401/403/416/425 responses, and the WHEP live-view start/stop;
+  - the live-view route: session and origin checks, offer validation, demo mode refusal, and never returning Ring's session URL or the token;
   - atomic and race-safe sealing;
   - report integrity warnings, including a timestamp that does not match a re-sealed record;
   - the PIN throttle;
   - session gating of the data API routes.
-- **AI assistance.** We built Witness with AI coding assistance: **Claude Code** wrote most of the code and tests from our design spec, task by task, and each task was reviewed against the spec before the next began. We made the product, safety and trust decisions. We generated the Playground tokens and checked every endpoint live (with curl, 2026-10-10) before the client was written, and kept the friction log as we went.
+- **AI assistance.** We built Witness with AI coding assistance: **Claude Code** wrote most of the code and tests from our design spec, task by task, and each task was reviewed against the spec before the next began. We made the product, safety and trust decisions. We generated the Playground tokens and checked every history and media endpoint live (with curl, 2026-10-10) before the client was written, and kept the friction log as we went. The live-view (WHEP) calls were added later, unit-tested against mocked responses, then checked end to end against the live Playground.
 
 ## Challenges we ran into
 
@@ -136,7 +140,7 @@ The report says what the checks prove, and no more:
   - quick exit with Esc twice;
   - a single history entry;
   - a safety page with helplines.
-- **173 passing tests**, and a detailed friction log and product feedback for the Ring team.
+- **217 passing tests**, and a detailed friction log and product feedback for the Ring team.
 
 ## What we learned
 
@@ -161,7 +165,7 @@ Witness is open source under the **MIT License**, so advocates, legal-aid groups
 
 ## Built With
 
-`ring-partner-api` · `ring-developer-playground` · `next.js` · `react` · `typescript` · `tailwindcss` · `pdf-lib` · `fflate` · `vitest` · `web-crypto` · `rfc-3161` · `freetsa` · `node.js` · `claude-code`
+`ring-partner-api` · `ring-developer-playground` · `webrtc` · `whep` · `next.js` · `react` · `typescript` · `tailwindcss` · `pdf-lib` · `fflate` · `vitest` · `web-crypto` · `rfc-3161` · `freetsa` · `node.js` · `claude-code`
 
 ## Testing instructions for judges
 
@@ -176,4 +180,4 @@ No credentials are needed.
 ## Product feedback and friction log
 
 - **Product feedback:** see `docs/submission/product-feedback.md` (Ring Partner API, Ring Developer Playground, Ring developer documentation, plus the sample and MCP docs server we evaluated).
-- **Friction log:** see `docs/submission/friction-log.md` (13 entries with severity, workaround and suggestion).
+- **Friction log:** see `docs/submission/friction-log.md` (14 entries with severity, workaround and suggestion).

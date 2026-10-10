@@ -216,3 +216,13 @@
 - **Severity:** Low.
 - **Workaround:** the timeline shows a 10-character short form (`lib/report/pdf.ts:113-116`), and the incident pages print the full ID.
 - **Suggestion:** a stable short display ID, or a documented safe suffix length.
+
+## N. Linking a live-view session to its recording
+
+- **Task:** after a WHEP live view, find the recording Ring makes of it, so the user can seal "this moment".
+- **Steps:** close the session, then poll `GET /v1/history/devices/{id}/events` for a new `on_demand` event.
+- **Expected:** the WHEP `201` response (or the session resource) names the history event or recording it will produce.
+- **Actual:** nothing links them. The recording appears in history some seconds later (about 30 s in our Playground test), and we match it by type and start time. Two sessions close together could be confused.
+- **Severity:** Medium.
+- **Workaround:** match the newest `on_demand` event that started no more than 10 s before the stream began (`lib/ui/live.ts`), and let the user confirm it in the Log dialog before sealing.
+- **Suggestion:** return the future history event ID (or a correlation ID) in the WHEP response headers.

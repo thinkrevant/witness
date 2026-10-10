@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { DELETE, GET, POST } from "@/app/api/lock/route";
 import { verifyPin } from "@/lib/auth/pin";
 import { isSessionValid } from "@/lib/auth/session";
+import { rememberLiveSession } from "@/lib/live/sessions";
 
 // The real scrypt check, wrapped so a test can see whether it ran.
 vi.mock("@/lib/auth/pin", async (importOriginal) => {
@@ -140,5 +141,20 @@ describe("/api/lock", () => {
     expect(res.status).toBe(200);
     expect(isSessionValid(token)).toBe(false);
     expect(res.headers.get("set-cookie") ?? "").toMatch(/Max-Age=0/i);
+  });
+
+  it("DELETE with a valid session also stops any open live view; without one it does not", async () => {
+    const stop = vi.fn(async () => undefined);
+    rememberLiveSession("https://api.amazonvision.com/s/live", { start: vi.fn(), stop });
+
+    await DELETE(new Request("http://localhost/api/lock", { method: "DELETE" }));
+    expect(stop).not.toHaveBeenCalled();
+
+    const token = tokenFrom(await post("4821"));
+    await DELETE(
+      new Request("http://localhost/api/lock", { method: "DELETE", headers: { cookie: `db_s=${token}` } }),
+    );
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledWith("https://api.amazonvision.com/s/live"));
+    expect(globalThis.__witnessLiveSessions?.size).toBe(0);
   });
 });

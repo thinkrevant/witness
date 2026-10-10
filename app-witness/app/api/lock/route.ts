@@ -10,8 +10,10 @@ import {
   SESSION_COOKIE,
   createSession,
   endSession,
+  isSessionValid,
   readSessionToken,
 } from "@/lib/auth/session";
+import { stopAllLiveSessions } from "@/lib/live/sessions";
 import { getStore } from "@/lib/store/store";
 
 function sessionCookie(token: string): string {
@@ -88,7 +90,11 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   const token = readSessionToken(req);
-  if (token) endSession(token);
+  if (token && isSessionValid(token)) {
+    endSession(token);
+    // Locking (or Quick exit) also ends any live view. Not awaited: leaving must stay instant.
+    void stopAllLiveSessions();
+  }
   return Response.json(
     { ok: true },
     {

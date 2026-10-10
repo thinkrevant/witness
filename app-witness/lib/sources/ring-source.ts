@@ -33,5 +33,13 @@ export function createRingSource(client: RingClient): EventSource {
     async clip(ev: RingEvent): Promise<MediaResult> {
       return client.downloadClip(await firstDeviceId(), ev);
     },
+    live: {
+      async start(offerSdp: string) {
+        return client.startLiveView(await firstDeviceId(), offerSdp);
+      },
+      stop(sessionUrl: string) {
+        return client.stopLiveView(sessionUrl);
+      },
+    },
   };
 }

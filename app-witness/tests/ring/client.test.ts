@@ -296,3 +296,89 @@ describe("retries and errors", () => {
     expect((err as Error).message).toContain("500");
   });
 });
+
+describe("live view (WHEP)", () => {
+  const OFFER = "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=recvonly\r\n";
+  const ANSWER = "v=0\r\no=- 3 4 IN IP4 0.0.0.0\r\ns=-\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=sendonly\r\n";
+  const SESSIONS = `${BASE}/v1/devices/${encodeURIComponent(DEVICE)}/media/streaming/whep/sessions`;
+
+  function created(location: string | null, body = ANSWER): Response {
+    const headers: Record<string, string> = { "content-type": "application/sdp" };
+    if (location !== null) headers.location = location;
+    return new Response(body, { status: 201, headers });
+  }
+
+  it("POSTs the raw SDP offer and returns the answer and absolute session URL", async () => {
+    const { client, fetchMock } = makeClient([created(`${SESSIONS}/sess-1`)]);
+    const result = await client.startLiveView(DEVICE, OFFER);
+    expect(result).toEqual({ answerSdp: ANSWER, sessionUrl: `${SESSIONS}/sess-1` });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe(SESSIONS);
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(OFFER);
+    const headers = init?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(headers["Content-Type"]).toBe("application/sdp");
+    expect(init?.redirect).toBe("manual");
+  });
+
+  it("resolves a relative Location against the API base", async () => {
+    const { client } = makeClient([created("/v1/devices/d1/media/streaming/whep/sessions/s2")]);
+    const { sessionUrl } = await client.startLiveView("d1", OFFER);
+    expect(sessionUrl).toBe(`${BASE}/v1/devices/d1/media/streaming/whep/sessions/s2`);
+  });
+
+  it("refuses a Location on another origin or a missing Location", async () => {
+    for (const location of ["https://evil.example/sessions/1", "http://api.amazonvision.com/x", "//evil.example/x", null]) {
+      const { client } = makeClient([created(location)]);
+      await expect(client.startLiveView(DEVICE, OFFER), String(location)).rejects.toThrow(/session/i);
+    }
+  });
+
+  it("maps 401 to RingAuthError and other statuses to an error with the status, never the token", async () => {
+    const auth = makeClient([apiError(401, "UNAUTHORIZED")]);
+    await expect(auth.client.startLiveView(DEVICE, OFFER)).rejects.toBeInstanceOf(RingAuthError);
+
+    for (const status of [200, 400, 500, 503]) {
+      const { client } = makeClient([apiError(status, "X")]);
+      const err = await client.startLiveView(DEVICE, OFFER).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(RingAuthError);
+      expect((err as Error).message).toContain(String(status));
+      expect((err as Error).message).not.toContain(TOKEN);
+    }
+  });
+
+  it("stopLiveView DELETEs the session URL with the token", async () => {
+    const { client, fetchMock } = makeClient([new Response(null, { status: 204 })]);
+    await client.stopLiveView(`${SESSIONS}/sess-1`);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe(`${SESSIONS}/sess-1`);
+    expect(init?.method).toBe("DELETE");
+    expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it("stopLiveView treats 200 and 404 (already ended) as success", async () => {
+    for (const status of [200, 404]) {
+      const { client } = makeClient([new Response(null, { status })]);
+      await expect(client.stopLiveView(`${SESSIONS}/s`)).resolves.toBeUndefined();
+    }
+  });
+
+  it("stopLiveView refuses a URL on another origin without calling fetch", async () => {
+    const { client, fetchMock } = makeClient([]);
+    for (const url of ["https://evil.example/s", "http://api.amazonvision.com/s", "not a url"]) {
+      await expect(client.stopLiveView(url)).rejects.toThrow();
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("stopLiveView maps 401 to RingAuthError and other failures to an error without the token", async () => {
+    const auth = makeClient([apiError(401, "UNAUTHORIZED")]);
+    await expect(auth.client.stopLiveView(`${SESSIONS}/s`)).rejects.toBeInstanceOf(RingAuthError);
+    const other = makeClient([apiError(500, "INTERNAL")]);
+    const err = await other.client.stopLiveView(`${SESSIONS}/s`).catch((e: unknown) => e);
+    expect((err as Error).message).toContain("500");
+    expect((err as Error).message).not.toContain(TOKEN);
+  });
+});

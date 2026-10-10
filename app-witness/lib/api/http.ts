@@ -22,17 +22,31 @@ export async function readJsonObject(req: Request): Promise<Record<string, unkno
  */
 export function rejectCrossSite(req: Request): Response | null {
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  return type === "application/json" && isSameOrigin(req) ? null : forbidden();
+}
+
+/**
+ * For a state-changing request without a body (e.g. DELETE): an Origin header, when present, must
+ * name this server's own host. A cross-site page cannot send a DELETE without a CORS preflight.
+ */
+export function rejectForeignOrigin(req: Request): Response | null {
+  return isSameOrigin(req) ? null : forbidden();
+}
+
+/** True when there is no Origin header, or it names this server's own host. */
+function isSameOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
-  let sameOrigin = true;
-  if (origin !== null) {
-    const host = req.headers.get("host") ?? new URL(req.url).host;
-    try {
-      sameOrigin = new URL(origin).host === host;
-    } catch {
-      sameOrigin = false;
-    }
+  if (origin === null) return true;
+  const host = req.headers.get("host") ?? new URL(req.url).host;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
   }
-  return type === "application/json" && sameOrigin ? null : Response.json({ error: "forbidden" }, { status: 403 });
+}
+
+function forbidden(): Response {
+  return Response.json({ error: "forbidden" }, { status: 403 });
 }
 
 export function badRequest(error = "bad-request"): Response {

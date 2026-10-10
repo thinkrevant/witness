@@ -452,6 +452,13 @@ describe("ring source", () => {
         calls.push(`clip:${id}`);
         return media(clipBytes, "video/mp4");
       },
+      startLiveView: async (id) => {
+        calls.push(`live:${id}`);
+        return { answerSdp: "v=0", sessionUrl: "https://api.amazonvision.com/s" };
+      },
+      stopLiveView: async () => {
+        calls.push("stop");
+      },
     };
     return { client, calls };
   }

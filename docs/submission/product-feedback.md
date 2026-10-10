@@ -19,6 +19,7 @@ This feedback covers every tool, API and SDK that Witness uses. It is ordered by
 | `GET /v1/history/devices/{id}/events` | Build the "Doorbell activity" list. |
 | `POST /v1/devices/{id}/media/image/download` | Get the original snapshot to seal. |
 | `POST /v1/devices/{id}/media/video/download` | Get the original clip to seal. |
+| `POST /v1/devices/{id}/media/streaming/whep/sessions` + `DELETE` on the returned `Location` | **Watch live**: stream the doorbell in real time over WebRTC, then close the session. |
 
 During exploration we also called `GET /v1/users/me` with curl.
 
@@ -35,6 +36,7 @@ During exploration we also called `GET /v1/users/me` with curl.
   These are exactly what a chain-of-custody record needs. Witness prints every one of them per file in the court report (`lib/report/pdf.ts:229-253`). The recorded headers are in `fixtures/playground/vehicle-*-headers.txt`.
 - **The bytes are stable, so hashing works.** A downloaded file can be stored untouched and fingerprinted. Nothing re-encodes it on our side.
 - **Retry guidance for `416`/`425` is documented and easy to implement** (`client.ts:200-211`, retrying after 5, 10, 20 and 30 s).
+- **WHEP live view worked on the first live attempt.** A standard browser `RTCPeerConnection` (video `recvonly`, offer sent after ICE gathering) got a `201` with an SDP answer, and 1280×720 H.264 video was playing within about 5 s. The live session then showed up in history as an `on_demand` recording, which is what makes our "Capture this moment" possible.
 - **The watermark is a good trust anchor.** Ring's burned-in logo, device ID and partner name give a court a reason to believe an image came from Ring.
 
 **What needs work**
@@ -208,5 +210,5 @@ The sample has Python scripts (with an interactive explorer that prints equivale
 | **fflate** | The evidence bundle `.zip` | Tiny and synchronous. `level: 0` stores media byte-for-byte. | None. | Yes |
 | **Web Crypto (`crypto.subtle`)** | SHA-256 on the server, in the browser and in offline `verify.html` | One hashing code path everywhere (`lib/evidence/hash.ts`). | None. | Yes |
 | **FreeTSA (RFC 3161)** | An independent timestamp per ledger entry | Free, no key. We hand-encoded the DER request (`lib/timestamp/tsa.ts`). | Best effort, with no service guarantee, so Witness treats it as optional and never blocks a seal. | Yes, with a paid TSA for production |
-| **Vitest** | 173 tests in 18 files | Fast, and works with TypeScript and the `@/` alias. | The config needed to be `.mts` to avoid an ESM-as-CJS warning. | Yes |
+| **Vitest** | 217 tests in 22 files | Fast, and works with TypeScript and the `@/` alias. | The config needed to be `.mts` to avoid an ESM-as-CJS warning. | Yes |
 | **Claude Code** | AI coding assistant that wrote most of the code and tests from our spec | Kept a strict test-first, task-by-task process with reviews between tasks. | Live Ring checks still needed a human to generate Playground tokens every 30 minutes. | Yes |

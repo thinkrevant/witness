@@ -44,6 +44,7 @@ Built for the *Build, Ship, Shape* Amazon Developer Hackathon (Ring track and Op
 | Unlock | `/lock` ([01](docs/screenshots/01-lock.png)) | A plain "Daybook" screen asks for a 4–8 digit code. The first run sets the code. |
 | Case setup | `/setup` ([02](docs/screenshots/02-setup.png)) | Enter the order details once: names, order number, court, dates and conditions. These go on the report. |
 | Doorbell activity | `/` ([03](docs/screenshots/03-activity.png)) | Shows recent Ring events with a thumbnail and a **Log as violation** button. |
+| Watch live → Capture this moment | `/` (live mode only) | **Watch live** shows the doorbell's live video (WebRTC/WHEP, video only) with a countdown. **Capture this moment** ends the stream, waits for Ring's recording of it to appear in history, and opens the same Log dialog to seal it. Tested live against the Ring Developer Playground on 2026-10-10 (video arrived in about 5 s; the captured recording opened in the Log dialog). |
 | Seal | dialog ([04a](docs/screenshots/04a-log-dialog.png), [04](docs/screenshots/04-seal.png)) | Add an optional note, then tap **Seal**. Witness downloads the snapshot and clip from Ring, stores the bytes untouched, and appends a hash-chained ledger entry. It then requests an RFC 3161 timestamp, which is best effort. |
 | Incident log | `/incidents` ([05](docs/screenshots/05-incidents.png)) | A timeline of sealed incidents with the photo, the playable clip, a "Sealed · fingerprint" badge and the timestamp status. It shows "All records intact ✓" only when the chain, every file and every timestamp check out. |
 | Report | `/report` ([06](docs/screenshots/06-report.png)) | Two downloads with neutral file names (`daybook-record-YYYY-MM-DD`): **the PDF**, and **the evidence bundle** (`.zip`) holding the PDF, the original media, `manifest.json`, an offline `verify.html`, `README.txt` and the timestamp tokens. |
@@ -154,6 +155,8 @@ flowchart LR
   SIGNED["Pre-signed media URL<br/>(303 Location)"]
   FREETSA["freetsa.org/tsr"]
   FIX["fixtures/playground<br/>(recorded Playground data)"]
+  STUN["stun.l.google.com<br/>(only while Watch live is open)"]
+  RMEDIA["Ring media servers<br/>(WebRTC, address from the WHEP answer)"]
 
   UI --> API
   VF --> API
@@ -162,8 +165,10 @@ flowchart LR
   API --> REP
   SRC -->|live| RC
   SRC -->|demo| FIX
-  RC -->|Bearer token| RING
+  RC -->|Bearer token, also WHEP offer and stop| RING
   RC -->|GET, no Authorization| SIGNED
+  RMEDIA -.->|WebRTC video, only during Watch live| UI
+  UI -.->|STUN| STUN
   SEAL --> SRC
   SEAL --> LED
   SEAL --> ST
@@ -188,24 +193,27 @@ All calls go through `app-witness/lib/ring/client.ts`. Base URL: `https://api.am
 
 | Ring endpoint | Where | Notes |
 |---|---|---|
-| `GET /v1/devices?include=status` | [`lib/ring/client.ts:128`](app-witness/lib/ring/client.ts#L128) | Joins online status from `included` `device-status` resources (`client.ts:90-95`). |
-| `GET /v1/history/devices/{device_id}/events` | [`lib/ring/client.ts:143`](app-witness/lib/ring/client.ts#L143) | Follows `links.next` (`client.ts:148-156`), refuses any next link to another origin so the token cannot leak, and sorts newest first. |
-| `POST /v1/devices/{device_id}/media/image/download` | [`lib/ring/client.ts:217`](app-witness/lib/ring/client.ts#L217) | Body `{"type":"latest_in_range", start_timestamp, end_timestamp, image_options:{format:"jpeg", resolution:1920×1080}}` (`client.ts:218-221`). |
-| `POST /v1/devices/{device_id}/media/video/download` | [`lib/ring/client.ts:227`](app-witness/lib/ring/client.ts#L227) | Body `{timestamp, duration}`, with duration clamped to 1,000–900,000 ms (`client.ts:225-226`). |
-| 303 → pre-signed media URL | [`lib/ring/client.ts:161-198`](app-witness/lib/ring/client.ts#L161) | `redirect: "manual"` (`:164`). The `Location` URL is fetched **without** the Authorization header (`:182`). `X-Request-ID`, `X-Media-Timestamp`, `X-Media-Duration` and `Content-Type` are captured (`:179`, `:192-195`). |
-| Error handling | [`lib/ring/client.ts:115-119`](app-witness/lib/ring/client.ts#L115), [`:168-176`](app-witness/lib/ring/client.ts#L168), [`:200-211`](app-witness/lib/ring/client.ts#L200) | 401 becomes `RingAuthError`. 416/425 on the POST or the signed GET are retried after 5, 10, 20 and 30 s. `403 TIME_RANGE_NOT_AUTHORIZED` becomes `RingMediaUnavailable`. |
+| `GET /v1/devices?include=status` | [`lib/ring/client.ts:138`](app-witness/lib/ring/client.ts#L138) | Joins online status from `included` `device-status` resources (`client.ts:100-105`). |
+| `GET /v1/history/devices/{device_id}/events` | [`lib/ring/client.ts:153`](app-witness/lib/ring/client.ts#L153) | Follows `links.next` (`client.ts:158-166`), refuses any next link to another origin so the token cannot leak, and sorts newest first. |
+| `POST /v1/devices/{device_id}/media/image/download` | [`lib/ring/client.ts:269`](app-witness/lib/ring/client.ts#L269) | Body `{"type":"latest_in_range", start_timestamp, end_timestamp, image_options:{format:"jpeg", resolution:1920×1080}}` (`client.ts:270-273`). |
+| `POST /v1/devices/{device_id}/media/video/download` | [`lib/ring/client.ts:279`](app-witness/lib/ring/client.ts#L279) | Body `{timestamp, duration}`, with duration clamped to 1,000–900,000 ms (`client.ts:277-278`). |
+| 303 → pre-signed media URL | [`lib/ring/client.ts:171-208`](app-witness/lib/ring/client.ts#L171) | `redirect: "manual"` (`:174`). The `Location` URL is fetched **without** the Authorization header (`:192`). `X-Request-ID`, `X-Media-Timestamp`, `X-Media-Duration` and `Content-Type` are captured (`:189`, `:202-205`). |
+| `POST /v1/devices/{device_id}/media/streaming/whep/sessions` (live view) | [`lib/ring/client.ts:238-253`](app-witness/lib/ring/client.ts#L238) | Body is the browser's raw SDP offer, `Content-Type: application/sdp` (`:244`): one video transceiver, receive-only, no audio, sent after ICE gathering completes. Expects `201` with the SDP answer (`:248`). The `Location` session URL must be on `https://api.amazonvision.com` or it is refused (`:249-251`, `apiUrl` at `:227-236`). Relayed by `app/api/live/route.ts`, which keeps that URL on the server and gives the browser only a random id. |
+| `DELETE` WHEP session (`Location` URL) | [`lib/ring/client.ts:255-261`](app-witness/lib/ring/client.ts#L255) | Ends the session on Stop, on Capture this moment, when the countdown ends, when the page is left, and when the app locks or Quick exit is used (`lib/live/sessions.ts:48-52`). Only an `https://api.amazonvision.com` URL is accepted; `2xx` and `404` count as closed (`:259`). |
+| Error handling | [`lib/ring/client.ts:125-129`](app-witness/lib/ring/client.ts#L125), [`:178-186`](app-witness/lib/ring/client.ts#L178), [`:210-221`](app-witness/lib/ring/client.ts#L210) | 401 becomes `RingAuthError`. 416/425 on the POST or the signed GET are retried after 5, 10, 20 and 30 s. `403 TIME_RANGE_NOT_AUTHORIZED` becomes `RingMediaUnavailable`. |
 
 The client is used by:
 
-- `lib/sources/ring-source.ts:10, 28, 31, 34`: uses the first device shared with the token.
-- `lib/sources/source.ts:24`: picks live or demo.
+- `lib/sources/ring-source.ts:10, 28, 31, 34, 38, 41`: uses the first device shared with the token. Only this source has `live` (live view); the demo source does not.
+- `lib/sources/source.ts:31`: picks live or demo.
 - The API routes:
   - `app/api/events/route.ts:14` (activity list)
   - `app/api/events/[id]/thumb/route.ts:31` (thumbnails)
   - `app/api/incidents/route.ts:70` → `lib/seal/seal.ts:48, 53` (sealing)
+  - `app/api/live/route.ts:28, 47` (live view start and stop; demo mode answers `409 live-unavailable`)
 - `scripts/ring-check.ts:25-43`.
 
-Ring errors become user-facing states in `lib/api/http.ts:60-71`:
+Ring errors become user-facing states in `lib/api/http.ts:74-85`:
 
 - `401` → `reconnect-ring`
 - `RingMediaUnavailable` → `422 footage-unavailable`, which shows the message "Footage not accessible with this token…" (`components/LogDialog.tsx`)
@@ -255,8 +263,9 @@ Anyone can re-check the files without Witness. Use `verify.html` (offline, inlin
   - No notifications, no accounts, no cloud.
   - Data lives in `app-witness/data/`, which is git-ignored.
   - The server binds to **127.0.0.1** only (`npm run dev` and `npm start` pass `-H 127.0.0.1`), so other devices on the same Wi-Fi cannot reach it.
-  - Requests that change data must be JSON from the app's own origin. Cross-site requests get `403` (`rejectCrossSite` in `lib/api/http.ts`).
+  - Requests that change data must be JSON from the app's own origin. Cross-site requests get `403` (`rejectCrossSite`, and `rejectForeignOrigin` for the live-view stop, in `lib/api/http.ts`).
   - While the app runs, its only outbound calls go to the Ring API and its signed media URLs (in live mode), and to FreeTSA, which receives **only the entry hash**.
+  - Only while **Watch live** is open, the browser also asks Google's public STUN server (`stun.l.google.com:19302`) for its public network address (so Google sees that address), and receives the video from Ring over WebRTC. Nothing about the doorbell or the case goes to the STUN server. The Ring token and Ring's session URL stay on the server.
   - Next.js itself sends anonymous usage telemetry from its CLI (`next dev`, `next build`) unless it is turned off. Set `NEXT_TELEMETRY_DISABLED=1` in your shell or in `app-witness/.env.local` (it is in `.env.example`).
 - **The Safety page** warns that the app may not be safe if the abuser can access the device. It lists the US and UK helplines and links to NNEDV Safety Net.
 - **No recognition of people.** There is no face, person or plate recognition, and no sharing or contact features. The survivor alone decides what is a violation.
@@ -265,7 +274,7 @@ Anyone can re-check the files without Witness. Use `verify.html` (offline, inlin
 
 ```bash
 cd app-witness
-npm test            # vitest: 173 tests in 18 files, all passing (run 2026-10-10)
+npm test            # vitest: 217 tests in 22 files, all passing (run 2026-10-10)
 npx tsc --noEmit
 npm run lint
 ```
@@ -280,9 +289,11 @@ What the tests cover (`app-witness/tests/`):
   - duration clamping
   - 416/425 retries, 401, `403 TIME_RANGE_NOT_AUTHORIZED`
   - token never leaked in errors
+  - live view (WHEP): the raw SDP offer, `201` + answer, refusing a session URL on another origin, `DELETE` with `404` as already closed
 - **Sealing.** Atomic seal, duplicate and race handling, clip-unavailable, and the TSA failing open.
 - **Reports.** Section order, INTEGRITY WARNING on tampering, never vouching for broken seals, flagging a timestamp that does not match a re-sealed record, and zip contents.
 - **Integrity in the app.** The Incident log data flags a changed media file, a broken seal and a timestamp issued for another hash. The media route refuses a changed file with `409`.
+- **Live view.** `/api/live` checks the session and origin, validates the offer, answers `409` in demo mode, never returns Ring's session URL or the token, and stops each session once; locking stops any open session. The browser helpers (ICE wait cap, countdown, connection-state handling and connect timeout, finding Ring's `on_demand` recording) are unit-tested. The WebRTC connection was checked in a browser against a local stand-in peer, then end to end against the live Ring Developer Playground on 2026-10-10 (1280×720 H.264 video, Capture this moment found the new `on_demand` recording).
 - **App behaviour.** Session gating of the data API routes, refusal of cross-site requests, PIN throttling, and the double-Esc detector.
 
 ## Limitations
@@ -293,7 +304,10 @@ What the tests cover (`app-witness/tests/`):
   - Live mode uses the first device shared with the token.
 - **No webhooks.**
   - The Playground sends none, so Witness pulls history when Home opens; nothing is pushed.
-  - Witness does not stream live view (WHEP). It works from recorded history.
+- **Live view was tested only against the Ring Developer Playground**, not a physical doorbell. The countdown assumes the 60-second limit of line-powered devices.
+  - It is video only (no audio), uses the first device, and needs live mode.
+  - Ring ends a session after 30 s on battery devices and 60 s on wired ones. The countdown always starts at 60, so on a battery device the view ends early with "Live view ended".
+  - The live view itself is not sealed. Ring's own recording of it (an `on_demand` event) is what gets sealed, through the usual Log dialog, once it appears in history.
 - **Local only.**
   - The Ring token is kept in `data/store.json` on this computer.
   - Media is not encrypted at rest yet.
@@ -325,9 +339,10 @@ Put these in `app-witness/.env.local`, or set them in the shell. A template is i
 ```
 app-witness/
   app/            Next.js pages ((app)/ is gated by the session) and API routes (app/api/*)
-  components/     QuickExit, IdleLock, EventCard, LogDialog, SealedBadge, RingStatus, ...
+  components/     QuickExit, IdleLock, EventCard, LogDialog, LiveView, SealedBadge, RingStatus, ...
   lib/ring/       Ring Partner API client
   lib/sources/    live Ring source and demo (fixture) source
+  lib/live/       open live-view sessions (server-side only)
   lib/seal/       atomic "Log as violation"
   lib/evidence/   SHA-256, canonical JSON, hash-chained ledger, verification
   lib/timestamp/  RFC 3161 request and response parsing (FreeTSA)

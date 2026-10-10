@@ -45,6 +45,16 @@ export interface RingClient {
   listEvents(deviceId: string): Promise<RingEvent[]>;
   downloadSnapshot(deviceId: string, ev: RingEvent): Promise<MediaResult>;
   downloadClip(deviceId: string, ev: RingEvent): Promise<MediaResult>;
+  /** Opens a WHEP live-view session: sends the SDP offer, returns Ring's SDP answer and session URL. */
+  startLiveView(deviceId: string, offerSdp: string): Promise<LiveViewSession>;
+  /** Closes a WHEP session. An already-ended session (404) counts as closed. */
+  stopLiveView(sessionUrl: string): Promise<void>;
+}
+
+export interface LiveViewSession {
+  answerSdp: string;
+  /** Absolute https://api.amazonvision.com URL; DELETE it to end the session. Server-side only. */
+  sessionUrl: string;
 }
 
 interface ApiErrorBody {
@@ -210,9 +220,51 @@ export function createRingClient(opts: RingClientOptions): RingClient {
     );
   }
 
+  /**
+   * Resolves a URL (against the API base when `base` is given) and throws unless it stays on the API
+   * origin, because the token is sent there.
+   */
+  function apiUrl(raw: string, what: string, base?: string): string {
+    let resolved: URL;
+    try {
+      resolved = new URL(raw, base);
+    } catch {
+      throw new Error(`Ring API ${what} is not a valid URL`);
+    }
+    if (resolved.origin !== BASE_URL) throw new Error(`Ring API ${what} is on an unexpected host`);
+    return resolved.href;
+  }
+
+  async function startLiveView(deviceId: string, offerSdp: string): Promise<LiveViewSession> {
+    const res = await doFetch(
+      `${BASE_URL}/v1/devices/${encodeURIComponent(deviceId)}/media/streaming/whep/sessions`,
+      {
+        method: "POST",
+        redirect: "manual",
+        headers: { ...authHeaders, "Content-Type": "application/sdp" },
+        body: offerSdp,
+      },
+    );
+    if (res.status !== 201) await failFor(res, "live view");
+    const location = res.headers.get("location");
+    if (!location) throw new Error("Ring API live view session had no location header");
+    const sessionUrl = apiUrl(location, "live view session location", BASE_URL);
+    return { answerSdp: await res.text(), sessionUrl };
+  }
+
+  async function stopLiveView(sessionUrl: string): Promise<void> {
+    // Only the absolute URL startLiveView returned is accepted.
+    const url = apiUrl(sessionUrl, "live view session URL");
+    const res = await doFetch(url, { method: "DELETE", redirect: "manual", headers: authHeaders });
+    if (res.ok || res.status === 404) return;
+    await failFor(res, "live view stop");
+  }
+
   return {
     listDevices,
     listEvents,
+    startLiveView,
+    stopLiveView,
     downloadSnapshot(deviceId, ev) {
       return download(`/v1/devices/${encodeURIComponent(deviceId)}/media/image/download`, {
         type: "latest_in_range",

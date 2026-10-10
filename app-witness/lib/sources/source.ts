@@ -1,6 +1,6 @@
 // Server-only: picks between the live Ring API and the bundled demo fixtures.
 import { createRingClient } from "@/lib/ring/client";
-import type { MediaResult, RingEvent } from "@/lib/ring/client";
+import type { LiveViewSession, MediaResult, RingEvent } from "@/lib/ring/client";
 import type { Settings } from "@/lib/store/store";
 import { createDemoSource } from "./demo-source";
 import { createRingSource } from "./ring-source";
@@ -10,6 +10,13 @@ export interface EventSource {
   listEvents(): Promise<RingEvent[]>;
   snapshot(ev: RingEvent): Promise<MediaResult>;
   clip(ev: RingEvent): Promise<MediaResult>;
+  /** Live view (WebRTC/WHEP). Only the live Ring source has it; the demo source omits it. */
+  live?: LiveView;
+}
+
+export interface LiveView {
+  start(offerSdp: string): Promise<LiveViewSession>;
+  stop(sessionUrl: string): Promise<void>;
 }
 
 /** The Ring token in use: the one saved in Settings, else RING_ACCESS_TOKEN. Empty strings count as none. */
