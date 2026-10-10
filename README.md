@@ -72,7 +72,7 @@ You need **Node.js 24 or newer** and Git. Check your version with `node --versio
 
 ```powershell
 winget install OpenJS.NodeJS.LTS   # or download Node 24+ from https://nodejs.org
-git clone <this-repo-url> witness
+git clone https://github.com/thinkrevant/witness.git witness
 cd witness\app-witness
 npm install
 npm run dev
@@ -82,7 +82,7 @@ npm run dev
 
 ```bash
 brew install node@24   # or download from https://nodejs.org
-git clone <this-repo-url> witness
+git clone https://github.com/thinkrevant/witness.git witness
 cd witness/app-witness
 npm install
 npm run dev
@@ -92,7 +92,7 @@ npm run dev
 
 ```bash
 nvm install 24         # or use your distribution's Node 24 package
-git clone <this-repo-url> witness
+git clone https://github.com/thinkrevant/witness.git witness
 cd witness/app-witness
 npm install
 npm run dev
